@@ -2,15 +2,15 @@
 name = "daily-report"
 version = "0.1.0"
 description = "매일 아침 8시(KST) 개발 학습 리포트를 디스코드로 발송"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     # core
     "pydantic>=2.7",
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
 
-    # LLM
-    "anthropic>=0.40",
+    # LLM (Google Gemini — 무료 티어 사용)
+    "google-genai>=0.3",
 
     # collectors
     "notion-client>=2.2",          # notion
@@ -43,7 +43,7 @@ packages = ["src/daily_report"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

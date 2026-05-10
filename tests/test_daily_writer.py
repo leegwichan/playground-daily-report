@@ -8,7 +8,8 @@ from pathlib import Path
 from daily_report.config import load_config
 from daily_report.llm import LLM
 from daily_report.schemas import Event, SourceType
-from daily_report.writers.daily import _parse_json, write_daily_report
+from daily_report.writers._common import parse_json
+from daily_report.writers.daily import write_daily_report
 
 
 def _sample_event() -> Event:
@@ -53,9 +54,9 @@ def test_empty_events_produces_quiet_day_report(example_profile_path: Path) -> N
 
 def test_parse_json_handles_code_fence() -> None:
     raw = '```json\n{"a": 1}\n```'
-    assert _parse_json(raw) == {"a": 1}
+    assert parse_json(raw) == {"a": 1}
 
 
 def test_parse_json_handles_surrounding_noise() -> None:
     raw = 'Here is the report:\n{"a": 1}\nLet me know if changes needed.'
-    assert _parse_json(raw) == {"a": 1}
+    assert parse_json(raw) == {"a": 1}

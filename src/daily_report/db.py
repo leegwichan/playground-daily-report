@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -112,3 +112,35 @@ class Database:
     def count_reports(self) -> int:
         with self.conn() as conn:
             return conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0]
+
+    # ─────────────────────────────────────────────────────────
+    # CS 개념 추적 (deep_dive 반복 방지)
+    # ─────────────────────────────────────────────────────────
+    def recently_covered_concepts(self, within_days: int) -> list[str]:
+        """min_days_between_repeat 내에 이미 다룬 개념 목록.
+
+        within_days 일수 안에 last_covered_at 가 있는 개념들을 반환.
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=within_days)).isoformat()
+        with self.conn() as conn:
+            rows = conn.execute(
+                "SELECT concept FROM cs_concepts_covered WHERE last_covered_at >= ? ORDER BY last_covered_at DESC",
+                (cutoff,),
+            ).fetchall()
+            return [r[0] for r in rows]
+
+    def mark_concept_covered(self, concept: str, report_id: Optional[int] = None) -> None:
+        """개념을 다뤘다고 기록. 기존에 있으면 last_covered_at 갱신, times_covered +1."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO cs_concepts_covered (concept, last_covered_at, times_covered, last_report_id)
+                VALUES (?, ?, 1, ?)
+                ON CONFLICT(concept) DO UPDATE SET
+                  last_covered_at = excluded.last_covered_at,
+                  times_covered   = times_covered + 1,
+                  last_report_id  = excluded.last_report_id
+                """,
+                (concept, now, report_id),
+            )

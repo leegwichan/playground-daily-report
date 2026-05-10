@@ -4,7 +4,8 @@ config/profile.yaml
 config/sources.yaml
 
 # Runtime data
-data/state.db
+# state.db 는 GitHub Actions 가 commit 하여 회차 간 멱등성을 유지하므로 추적함.
+# 단 SQLite journal/WAL 임시 파일은 무시.
 data/state.db-journal
 data/state.db-wal
 data/state.db-shm

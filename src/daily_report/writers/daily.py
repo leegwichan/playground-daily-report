@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
 
 from ..config import AppConfig
 from ..llm import LLM
 from ..schemas import Event, Report, ReportSection
+from ._common import format_profile_block, parse_json, render_events
 
 
 _SYSTEM_PROMPT = """당신은 한 명의 개발자에게 매일 아침 8시에 전달되는 학습 리포트 작성자입니다.
@@ -45,36 +45,6 @@ _USER_PROMPT = """오늘({date}) 수집된 이벤트 {count}개:
 위 이벤트를 바탕으로 일간 리포트를 작성해주세요."""
 
 
-def _render_events(events: list[Event]) -> str:
-    blocks = []
-    for ev in events:
-        meta_hint = ""
-        if ev.source.value == "git" and "files_stat" in ev.metadata:
-            stat = ev.metadata["files_stat"]
-            if stat:
-                meta_hint = f"\n  파일변경: {stat.splitlines()[-1] if stat else ''}"
-        blocks.append(
-            f"- [{ev.source.value}] {ev.title}\n"
-            f"  {ev.summary}{meta_hint}"
-        )
-    return "\n\n".join(blocks)
-
-
-def _parse_json(raw: str) -> dict:
-    """LLM 이 코드 펜스로 감싸도 안전하게 파싱."""
-    s = raw.strip()
-    if s.startswith("```"):
-        s = s.strip("`")
-        if s.startswith("json"):
-            s = s[4:]
-    # 가장 바깥 { ... } 만 추출 (앞뒤 잡음 방어)
-    start = s.find("{")
-    end = s.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        s = s[start : end + 1]
-    return json.loads(s)
-
-
 def _empty_day_report(cfg: AppConfig, period_start: datetime, period_end: datetime) -> Report:
     return Report(
         kind="daily",
@@ -109,24 +79,15 @@ def write_daily_report(
     if not events:
         return _empty_day_report(cfg, period_start, period_end)
 
-    system = _SYSTEM_PROMPT.format(
-        levels=", ".join(cfg.profile.levels),
-        experience_years=cfg.profile.experience_years,
-        current_focus=", ".join(cfg.profile.current_focus) or "(미지정)",
-        learning_goals="; ".join(cfg.profile.learning_goals) or "(미지정)",
-        weak_areas=", ".join(cfg.profile.weak_areas) or "(미지정)",
-        tone=cfg.profile.tone,
-        daily_read_minutes=cfg.profile.daily_read_minutes,
-        language=cfg.profile.language,
-    )
+    system = _SYSTEM_PROMPT.format(**format_profile_block(cfg))
     user = _USER_PROMPT.format(
         date=now.strftime("%Y-%m-%d"),
         count=len(events),
-        events_block=_render_events(events),
+        events_block=render_events(events),
     )
 
-    raw = llm.complete(system, user, max_tokens=4000)
-    parsed = _parse_json(raw)
+    raw = llm.complete(system, user, max_tokens=4000, mock_kind="daily", json_mode=True)
+    parsed = parse_json(raw)
 
     return Report(
         kind="daily",

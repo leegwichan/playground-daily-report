@@ -16,7 +16,13 @@
       "Bash(git *)",
       "PowerShell(gh *)",
       "PowerShell(git config *)",
-      "PowerShell(git *)"
+      "PowerShell(git *)",
+      "Bash(PYTHONPATH=src python -c ' *)",
+      "Bash(PYTHONPATH=src python -m daily_report.main --dry-run --mock-llm --repo \"C:/Users/cnddk/AppData/Local/Temp/dr-v02-dwy3ille\" --db \"C:/Users/cnddk/AppData/Local/Temp/dr-v02-dwy3ille/state.db\")",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(PYTHONPATH=src python -m daily_report.main --dry-run --sources \"C:/Users/cnddk/AppData/Local/Temp/dr-real-t0tnkps5/sources-real-test.yaml\" --db \"C:/Users/cnddk/AppData/Local/Temp/dr-real-t0tnkps5/state.db\")",
+      "Bash(PYTHONPATH=src python -m daily_report.main --sources \"C:/Users/cnddk/AppData/Local/Temp/dr-real-t0tnkps5/sources-real-test.yaml\" --db \"C:/Users/cnddk/AppData/Local/Temp/dr-real-t0tnkps5/state.db\")"
     ]
   },
   "enabledPlugins": {

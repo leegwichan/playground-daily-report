@@ -10,13 +10,20 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .collectors.claude_sessions import collect_claude_sessions
 from .collectors.git_log import collect_git_log
+from .collectors.notion import collect_notion
+from .collectors.pdf_summary import collect_pdfs
+from .collectors.web_pages import collect_web_pages
 from .config import AppConfig, load_config, load_sources
 from .db import Database
 from .llm import LLM
 from .publishers.discord import publish_to_discord
-from .schemas import Event
+from .schemas import Event, Report
 from .writers.daily import write_daily_report
+from .writers.deep_dive import write_deep_dive_report
+from .writers.monthly import write_monthly_report
+from .writers.weekly import write_weekly_report
 
 _DEFAULT_PROFILE = "config/profile.yaml"
 _DEFAULT_PROFILE_FALLBACK = "config/profile.example.yaml"
@@ -44,28 +51,193 @@ def _resolve_path(path: str, fallback: str) -> str:
     raise FileNotFoundError(f"neither {path} nor {fallback} exists")
 
 
-def _collect_git_events(sources: dict, repo_override: str | None) -> list[Event]:
-    """sources.yaml 의 git.local_repos 를 순회하며 collect.
+def _collect_all_events(
+    sources: dict,
+    repo_override: str | None,
+    lookback_hours: int = 24,
+) -> list[Event]:
+    """sources.yaml 의 활성화된 모든 collector 를 순회하며 Event[] 누적.
 
-    --repo 가 주어지면 해당 1개 경로만 사용.
+    --repo override 가 주어지면 git.local_repos 는 무시하고 해당 1개만 사용.
     """
-    if repo_override:
-        return collect_git_log(repo_override, since_hours=24)
-
-    git_cfg = sources.get("sources", {}).get("git", {})
-    if not git_cfg.get("enabled", False):
-        return []
-
     events: list[Event] = []
-    for repo_cfg in git_cfg.get("local_repos") or []:
+
+    # ── Git ─────────────────────────────────────────────
+    if repo_override:
+        events.extend(collect_git_log(repo_override, since_hours=lookback_hours))
+    else:
+        git_cfg = sources.get("sources", {}).get("git", {})
+        if git_cfg.get("enabled", False):
+            for repo_cfg in git_cfg.get("local_repos") or []:
+                events.extend(
+                    collect_git_log(
+                        repo_path=repo_cfg["path"],
+                        since_hours=lookback_hours,
+                        author_email=repo_cfg.get("author_email") or None,
+                        branches=repo_cfg.get("branches"),
+                    )
+                )
+
+    # ── Claude Code 세션 ────────────────────────────────
+    claude_cfg = sources.get("sources", {}).get("claude_sessions", {})
+    if claude_cfg.get("enabled", False):
         events.extend(
-            collect_git_log(
-                repo_path=repo_cfg["path"],
-                since_hours=24,
-                author_email=repo_cfg.get("author_email") or None,
-                branches=repo_cfg.get("branches"),
+            collect_claude_sessions(
+                projects_dir=claude_cfg["projects_dir"],
+                lookback_hours=lookback_hours,
+                include_projects=claude_cfg.get("include_projects"),
+                exclude_projects=claude_cfg.get("exclude_projects"),
+                min_session_duration_minutes=claude_cfg.get(
+                    "min_session_duration_minutes", 5
+                ),
             )
         )
+
+    # ── Web pages ────────────────────────────────────────
+    web_cfg = sources.get("sources", {}).get("web_pages", {})
+    if web_cfg.get("enabled", False):
+        try:
+            events.extend(
+                collect_web_pages(
+                    feeds=web_cfg.get("feeds") or [],
+                    one_off=web_cfg.get("one_off") or [],
+                )
+            )
+        except Exception as e:
+            _info(f"[collect] web_pages 실패 (무시하고 계속): {e}")
+
+    # ── Notion ───────────────────────────────────────────
+    notion_cfg = sources.get("sources", {}).get("notion", {})
+    if notion_cfg.get("enabled", False):
+        try:
+            events.extend(
+                collect_notion(
+                    pages=notion_cfg.get("pages") or [],
+                    databases=notion_cfg.get("databases") or [],
+                    token=notion_cfg.get("token") or None,
+                    lookback_hours=lookback_hours,
+                )
+            )
+        except Exception as e:
+            _info(f"[collect] notion 실패 (무시하고 계속): {e}")
+
+    # ── PDF (inbox/pdf) ──────────────────────────────────
+    pdf_cfg = sources.get("sources", {}).get("pdfs", {})
+    if pdf_cfg.get("enabled", False):
+        try:
+            events.extend(
+                collect_pdfs(
+                    watch_dir=pdf_cfg["watch_dir"],
+                    delete_after_processed=pdf_cfg.get("delete_after_processed", False),
+                    summary_max_chars=pdf_cfg.get("summary_max_tokens", 2000),
+                )
+            )
+        except Exception as e:
+            _info(f"[collect] pdf 실패 (무시하고 계속): {e}")
+
+    return events
+
+
+def _publish_report(
+    report: Report,
+    cfg: AppConfig,
+    db: Database,
+    channel: str,
+    dry_run: bool,
+    log_prefix: str,
+) -> bool:
+    """단일 Report 를 지정된 채널로 발송하고 DB 에 기록. True = 성공."""
+    webhook = cfg.discord.webhook_urls.get(channel, "")
+    color = cfg.discord.embed_colors.get(channel, 0)
+
+    effective_dry_run = dry_run
+    if not effective_dry_run and not webhook:
+        _info(f"{log_prefix} '{channel}' webhook 미설정 → dry-run 으로 전환")
+        effective_dry_run = True
+
+    _info(f"{log_prefix} sending → '{channel}' (dry_run={effective_dry_run})")
+    result = publish_to_discord(
+        report=report,
+        webhook_url=webhook,
+        channel_label=channel,
+        color=color,
+        dry_run=effective_dry_run,
+    )
+
+    if not result.success:
+        _info(f"{log_prefix} FAILED: {result.error}")
+        return False
+
+    rid = db.save_report(report, channel_label=channel, message_id=result.discord_message_id)
+    _info(f"{log_prefix} saved report id={rid}; total={db.count_reports()}")
+    return True
+
+
+def _run_deep_dive(
+    events: list[Event],
+    cfg: AppConfig,
+    db: Database,
+    llm: LLM,
+    now: datetime,
+    dry_run: bool,
+) -> bool:
+    """deep_dive Report 생성·발송. 가능한 개념이 없으면 silently skip.
+
+    True = 시도했고 성공 (또는 skip), False = 시도했고 실패.
+    daily 와 독립적으로 동작 — deep_dive 실패가 daily 성공을 막지 않는다.
+    """
+    _info("[deep_dive] generating CS foundations...")
+    report = write_deep_dive_report(events, cfg, llm, db, now)
+    if report is None:
+        _info("[deep_dive] no eligible concept (no events + fallback exhausted) — skip")
+        return True
+
+    assert report.cs_foundations is not None
+    concept = report.cs_foundations.concept
+    _info(
+        f"[deep_dive] concept='{concept}' "
+        f"(relates_to_today={report.cs_foundations.relates_to_today_work})"
+    )
+
+    channel = "cs_foundations"
+    webhook = cfg.discord.webhook_urls.get(channel, "")
+    color = cfg.discord.embed_colors.get(channel, 0)
+
+    effective_dry_run = dry_run
+    if not effective_dry_run and not webhook:
+        _info(f"[deep_dive] '{channel}' webhook 미설정 → dry-run 으로 전환")
+        effective_dry_run = True
+
+    result = publish_to_discord(
+        report=report,
+        webhook_url=webhook,
+        channel_label=channel,
+        color=color,
+        dry_run=effective_dry_run,
+    )
+
+    if not result.success:
+        _info(f"[deep_dive] publish failed: {result.error}")
+        return False
+
+    rid = db.save_report(report, channel_label=channel, message_id=result.discord_message_id)
+    db.mark_concept_covered(concept, report_id=rid)
+    _info(f"[deep_dive] saved report id={rid}, concept marked covered")
+    return True
+
+
+def _collect_and_persist(
+    sources: dict,
+    db: Database,
+    repo_override: str | None,
+    lookback_hours: int,
+) -> list[Event]:
+    _info(f"[collect] git_log + claude_sessions + web_pages (lookback={lookback_hours}h)...")
+    events = _collect_all_events(sources, repo_override, lookback_hours=lookback_hours)
+    _info(f"[collect] {len(events)} event(s)")
+    if events:
+        n = db.upsert_events(events)
+        _info(f"[db]      upserted {n} event(s); total={db.count_events()}")
     return events
 
 
@@ -76,51 +248,80 @@ def run_daily(
     llm: LLM,
     repo_override: str | None,
     dry_run: bool,
+    skip_deep_dive: bool = False,
 ) -> int:
-    """0 = success, 1 = failure (CLI exit code)."""
+    """daily 와 (옵션) deep_dive 를 페어로 실행.
 
-    # 1. Collect
-    _info("[collect] git_log...")
-    events = _collect_git_events(sources, repo_override)
-    _info(f"[collect] {len(events)} event(s)")
-
-    # 2. Persist (멱등 — 같은 commit 재실행 시 덮어씀)
-    if events:
-        n = db.upsert_events(events)
-        _info(f"[db]      upserted {n} event(s); total={db.count_events()}")
-
-    # 3. Write
-    _info("[write]   daily report...")
+    0 = daily 성공, 1 = daily 실패. deep_dive 실패는 종료 코드에 영향 없음.
+    """
     now = datetime.now(timezone.utc)
+    events = _collect_and_persist(sources, db, repo_override, lookback_hours=24)
+
+    _info("[daily]   writing report...")
     report = write_daily_report(events, cfg, llm, now)
-    _info(f"[write]   title='{report.title}' sections={len(report.sections)} read~{report.estimated_read_minutes}분")
-
-    # 4. Publish
-    channel = "daily"
-    webhook = cfg.discord.webhook_urls.get(channel, "")
-    color = cfg.discord.embed_colors.get(channel, 0)
-
-    if not dry_run and not webhook:
-        _info(f"[publish] '{channel}' webhook 미설정 → dry-run 으로 전환")
-        dry_run = True
-
-    _info(f"[publish] sending → '{channel}' (dry_run={dry_run})")
-    result = publish_to_discord(
-        report=report,
-        webhook_url=webhook,
-        channel_label=channel,
-        color=color,
-        dry_run=dry_run,
+    _info(
+        f"[daily]   title='{report.title}' sections={len(report.sections)} "
+        f"read~{report.estimated_read_minutes}분"
     )
 
-    if result.success:
-        rid = db.save_report(report, channel_label=channel, message_id=result.discord_message_id)
-        _info(f"[db]      report saved id={rid}; total={db.count_reports()}")
-        _info("[done]    OK")
-        return 0
-    else:
-        _info(f"[publish] FAILED: {result.error}")
+    if not _publish_report(report, cfg, db, channel="daily", dry_run=dry_run, log_prefix="[daily]  "):
         return 1
+
+    if skip_deep_dive:
+        _info("[deep_dive] --skip-deep-dive 지정 → 건너뜀")
+    else:
+        _run_deep_dive(events, cfg, db, llm, now, dry_run=dry_run)
+
+    _info("[done]    OK")
+    return 0
+
+
+def run_weekly(
+    cfg: AppConfig,
+    sources: dict,
+    db: Database,
+    llm: LLM,
+    repo_override: str | None,
+    dry_run: bool,
+) -> int:
+    now = datetime.now(timezone.utc)
+    events = _collect_and_persist(sources, db, repo_override, lookback_hours=24 * 7)
+
+    _info("[weekly]  writing report...")
+    report = write_weekly_report(events, cfg, llm, now)
+    _info(
+        f"[weekly]  title='{report.title}' sections={len(report.sections)} "
+        f"read~{report.estimated_read_minutes}분"
+    )
+
+    if not _publish_report(report, cfg, db, channel="weekly", dry_run=dry_run, log_prefix="[weekly] "):
+        return 1
+    _info("[done]    OK")
+    return 0
+
+
+def run_monthly(
+    cfg: AppConfig,
+    sources: dict,
+    db: Database,
+    llm: LLM,
+    repo_override: str | None,
+    dry_run: bool,
+) -> int:
+    now = datetime.now(timezone.utc)
+    events = _collect_and_persist(sources, db, repo_override, lookback_hours=24 * 30)
+
+    _info("[monthly] writing report...")
+    report = write_monthly_report(events, cfg, llm, now)
+    _info(
+        f"[monthly] title='{report.title}' sections={len(report.sections)} "
+        f"read~{report.estimated_read_minutes}분"
+    )
+
+    if not _publish_report(report, cfg, db, channel="monthly", dry_run=dry_run, log_prefix="[monthly]"):
+        return 1
+    _info("[done]    OK")
+    return 0
 
 
 def cli(argv: list[str] | None = None) -> int:
@@ -139,18 +340,23 @@ def cli(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--mock-llm",
         action="store_true",
-        help="Anthropic API 호출 없이 캔드 응답 사용 (개발/테스트용)",
+        help="Gemini API 호출 없이 캔드 응답 사용 (개발/테스트용)",
     )
     parser.add_argument(
         "--repo",
         default=None,
-        help="단일 git repo 경로 override (sources.yaml 무시)",
+        help="단일 git repo 경로 override (sources.yaml 의 git.local_repos 무시)",
+    )
+    parser.add_argument(
+        "--skip-deep-dive",
+        action="store_true",
+        help="#cs-foundations 채널 deep_dive 발송 건너뛰기",
     )
     parser.add_argument(
         "--kind",
         default="daily",
-        choices=["daily"],
-        help="v0.1 은 daily 만 지원",
+        choices=["daily", "weekly", "monthly"],
+        help="daily(+자동 deep_dive) | weekly | monthly",
     )
     args = parser.parse_args(argv)
 
@@ -163,7 +369,33 @@ def cli(argv: list[str] | None = None) -> int:
     llm = LLM(model=cfg.llm.writer_model, mock=args.mock_llm)
 
     if args.kind == "daily":
-        return run_daily(cfg, sources, db, llm, args.repo, args.dry_run)
+        return run_daily(
+            cfg=cfg,
+            sources=sources,
+            db=db,
+            llm=llm,
+            repo_override=args.repo,
+            dry_run=args.dry_run,
+            skip_deep_dive=args.skip_deep_dive,
+        )
+    if args.kind == "weekly":
+        return run_weekly(
+            cfg=cfg,
+            sources=sources,
+            db=db,
+            llm=llm,
+            repo_override=args.repo,
+            dry_run=args.dry_run,
+        )
+    if args.kind == "monthly":
+        return run_monthly(
+            cfg=cfg,
+            sources=sources,
+            db=db,
+            llm=llm,
+            repo_override=args.repo,
+            dry_run=args.dry_run,
+        )
 
     return 1
 
