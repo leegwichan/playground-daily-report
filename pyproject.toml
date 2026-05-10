@@ -1,0 +1,49 @@
+[project]
+name = "daily-report"
+version = "0.1.0"
+description = "매일 아침 8시(KST) 개발 학습 리포트를 디스코드로 발송"
+requires-python = ">=3.12"
+dependencies = [
+    # core
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+
+    # LLM
+    "anthropic>=0.40",
+
+    # collectors
+    "notion-client>=2.2",          # notion
+    "PyGithub>=2.3",               # github
+    "httpx>=0.27",                 # http
+    "trafilatura>=1.12",           # web scraping
+    "pypdf>=4.3",                  # pdf
+
+    # publishers
+    "discord-webhook>=1.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[project.scripts]
+daily-report = "daily_report.main:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/daily_report"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

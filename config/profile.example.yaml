@@ -1,0 +1,112 @@
+# 사용자 프로필 — 리포트 톤·깊이·CS 보강 방향을 결정
+# 복사해서 profile.yaml 로 저장 후 본인 값으로 채우세요. profile.yaml 은 gitignore.
+
+profile:
+  # 표기 언어 (현재: ko | en)
+  language: ko
+
+  # 직무 레벨 — writers 가 톤·난이도·CS 보강 관점 결정에 사용
+  # 여러 개 동시 지정 가능. writers 는 모든 레벨을 통과시키는 콘텐츠를 생성한다.
+  # 예) [backend_jobseeker, backend_junior] 로 두면
+  #     - 취준생용: 면접·포트폴리오·기본기 관점
+  #     - 주니어용: 실무 생산성·디버깅·기술 깊이 관점
+  #     두 관점 모두 한 리포트에 포함됨 (CSFoundationsBlock.perspectives 참조)
+  #
+  # 사용 가능한 값 (자유 문자열도 허용):
+  #   backend_jobseeker | backend_junior | backend_mid | backend_senior
+  #   frontend_jobseeker | frontend_junior | frontend_mid | frontend_senior
+  #   fullstack_* | data_* | ml_* | devops_* | mobile_*
+  levels:
+    - backend_jobseeker
+    - backend_junior
+
+  experience_years: 0          # 경력 (년, 소수 가능)
+
+  # 현재 주력 기술 — 토픽 클러스터링 가중치에 사용
+  current_focus:
+    - python
+    - fastapi
+    - postgresql
+
+  # 학습 목표 — deep_dive(CS 보강) writer 가 우선 제안할 주제
+  learning_goals:
+    - "DB internals (B-tree / LSM tree / MVCC) 깊이 이해"
+    - "분산 시스템 일관성 모델 (CAP, PACELC) 정리"
+    - "HTTP/2, HTTP/3 동작 원리"
+
+  # 약한 영역 — deep_dive 가 일부러 자주 섞어줌
+  weak_areas:
+    - operating-systems
+    - networking
+
+  # 톤 — writers 의 system prompt 에 주입
+  # morning_calm  : 아침 출근길에 차분하게 보기 좋은 톤 (기본)
+  # concise       : 사실·링크 위주, 군더더기 최소
+  # playful       : 가벼운 비유와 농담 허용
+  tone: morning_calm
+
+  # 하루 읽는 데 쓸 수 있는 시간 (분) — writer 가 분량 조절
+  daily_read_minutes: 25
+
+# ─────────────────────────────────────────────────────────
+# CS 보강 (#cs-foundations 채널) — deep_dive writer 의 동작 제어
+# 핵심 원칙: 가능한 한 "오늘 작업한 내용과 연관된" CS/도구 지식
+# ─────────────────────────────────────────────────────────
+cs_foundations:
+  # 우선 다룰 영역
+  prioritize:
+    - employment_cs        # 취업용 CS 기본기 (자료구조·알고리즘·OS·DB·네트워크)
+    - dev_tool_internals   # 사용 도구 내부 동작 (Spring/Redis/PostgreSQL/Kafka 등)
+
+  # 가능하면 오늘 작업한 이벤트와 연결된 주제 우선
+  # true → 연관 토픽이 있으면 그것부터, 없을 때만 fallback_topics 사용
+  relate_to_today_work: true
+
+  # 같은 개념을 너무 자주 반복하지 않도록 최소 간격
+  min_days_between_repeat: 14
+
+  # 오늘 작업과 연관 토픽이 없을 때만 사용하는 폴백 풀
+  # writers 가 weak_areas / learning_goals 와 매칭해 1개 선택
+  fallback_topics:
+    - "DB indexing — B-tree vs Hash Index"
+    - "Spring AOP 동작 원리 (CGLIB vs JDK Proxy)"
+    - "Redis 내부 자료구조 (SDS, ziplist, skiplist)"
+    - "PostgreSQL MVCC 와 VACUUM"
+    - "TCP 3-way handshake & TLS 1.3 handshake"
+    - "운영체제 컨텍스트 스위칭 비용"
+    - "JVM GC 알고리즘 비교 (G1 vs ZGC)"
+    - "HTTP/2 멀티플렉싱 vs HTTP/3 QUIC"
+    - "캐시 일관성 — Cache-Aside / Write-Through / Write-Back"
+    - "분산 시스템 일관성 모델 (Linearizability / Sequential / Eventual)"
+
+discord:
+  # 환경변수 참조. 실제 webhook URL 은 .env 에 보관.
+  # 4개 채널: daily / weekly / monthly / cs-foundations
+  webhook_urls:
+    daily:          "${DISCORD_WEBHOOK_DAILY}"
+    weekly:         "${DISCORD_WEBHOOK_WEEKLY}"
+    monthly:        "${DISCORD_WEBHOOK_MONTHLY}"
+    cs_foundations: "${DISCORD_WEBHOOK_CS}"
+
+  # Embed 색상 (decimal). 채널별 시각 구분용.
+  embed_colors:
+    daily:          3447003     # blue
+    weekly:         10181046    # purple
+    monthly:        15844367    # gold
+    cs_foundations: 5763719     # green
+
+schedule:
+  timezone: Asia/Seoul
+  daily_at:    "08:00"          # 매일
+  weekly_at:   "MON 08:00"      # 월요일
+  monthly_at:  "1 08:00"        # 매월 1일
+
+llm:
+  # writers 와 processors 가 각각 다른 모델 사용 가능
+  # processors 는 클러스터링·요약만 → 비용 절감
+  # writers   는 최종 리포트 생성 → 품질 우선
+  processor_model: claude-haiku-4-5-20251001
+  writer_model:    claude-sonnet-4-6
+
+  # prompt caching 활성 (대량 컨텍스트에 효과적)
+  prompt_caching: true

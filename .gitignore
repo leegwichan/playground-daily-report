@@ -1,0 +1,31 @@
+# Secrets
+.env
+config/profile.yaml
+config/sources.yaml
+
+# Runtime data
+data/state.db
+data/state.db-journal
+data/state.db-wal
+data/state.db-shm
+inbox/pdf/*
+!inbox/pdf/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# AI
+.omc/

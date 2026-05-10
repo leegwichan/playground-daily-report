@@ -1,0 +1,106 @@
+# 어떤 입력 소스에서 데이터를 끌어올지 정의
+# 복사해서 sources.yaml 로 저장 후 본인 값으로 채우세요. sources.yaml 은 gitignore.
+
+sources:
+  # ─────────────────────────────────────────────────────────
+  # Notion: 페이지/DB 변경분 수집
+  # ─────────────────────────────────────────────────────────
+  notion:
+    enabled: true
+    token: "${NOTION_API_TOKEN}"
+    pages:                          # 변경 추적할 페이지 ID 목록
+      - id: "abcd1234-..."
+        label: "스터디 노트"
+    databases:
+      - id: "ef567890-..."
+        label: "TIL"
+        filter:
+          property: "Status"
+          equals: "Done"
+        since: "yesterday"          # yesterday | last_week | last_month
+
+  # ─────────────────────────────────────────────────────────
+  # Git: 로컬 repo 또는 GitHub 활동
+  # ─────────────────────────────────────────────────────────
+  git:
+    enabled: true
+    local_repos:
+      - path: "C:/Users/cnddk/Documents/playground-daily-report"
+        branches: ["main"]
+        author_email: "${GIT_AUTHOR_EMAIL}"   # 이 사람 커밋만 추적
+    github:
+      token: "${GITHUB_TOKEN}"
+      username: "your-github-username"
+      track:
+        - commits
+        - pull_requests
+        - issues_opened
+        - issues_closed
+        - reviews_given
+
+  # ─────────────────────────────────────────────────────────
+  # Claude Code 세션 로그
+  #   ~/.claude/projects/<project>/<session>.jsonl 파싱
+  #   작업 요약 + 사용자 레벨 기반 CS 보강 트리거
+  # ─────────────────────────────────────────────────────────
+  claude_sessions:
+    enabled: true
+    projects_dir: "C:/Users/cnddk/.claude/projects"
+    include_projects:               # glob 패턴
+      - "*"
+    exclude_projects:
+      - "*-secret-*"
+    # 세션에서 추출할 최소 신호
+    min_session_duration_minutes: 5
+    extract:
+      - tool_calls_summary          # 어떤 작업을 했는가
+      - files_touched               # 어떤 파일을 만졌는가
+      - errors_encountered          # 막혔던 지점 (CS 보강 트리거)
+      - libraries_used              # 어떤 라이브러리를 썼는가
+
+  # ─────────────────────────────────────────────────────────
+  # 웹페이지 스크래핑 (trafilatura 기반)
+  # ─────────────────────────────────────────────────────────
+  web_pages:
+    enabled: true
+    # 정기 수집 — 매일 새 글이 올라오는 사이트
+    feeds:
+      - url: "https://news.hada.io"
+        label: "GeekNews"
+        frequency: daily
+      - url: "https://news.ycombinator.com/"
+        label: "Hacker News"
+        frequency: daily
+        scope:
+          min_score: 100
+    # 일회성 — #commands 채널이나 sources.yaml 에 직접 추가
+    one_off:
+      - url: "https://example.com/some-article"
+        added_at: "2026-05-09"
+        note: "트랜스포머 아키텍처 정리글"
+        ttl_days: 7                 # 다음 리포트까지만 보존
+
+  # ─────────────────────────────────────────────────────────
+  # PDF: 원본은 commit 안 함, 요약본만 events 로 적재
+  # ─────────────────────────────────────────────────────────
+  pdfs:
+    enabled: true
+    summary_only: true              # 원본 보존 안 함
+    watch_dir: "./inbox/pdf"        # 여기 PDF 던지면 다음 회차에 처리
+    summary_max_tokens: 2000
+    delete_after_processed: false   # 백업으로 남길지
+
+# ─────────────────────────────────────────────────────────
+# 전역 수집 옵션
+# ─────────────────────────────────────────────────────────
+collection:
+  # 일간 리포트 lookback 윈도우 (기본 24h)
+  daily_lookback_hours: 24
+  weekly_lookback_days: 7
+  monthly_lookback_days: 30
+
+  # 이벤트 수가 너무 많으면 score 상위 N개만 writers 로 전달
+  max_events_per_report:
+    daily: 30
+    weekly: 80
+    monthly: 200
