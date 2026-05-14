@@ -15,26 +15,19 @@ from typing import Optional
 _MOCK_DAILY_REPORT_JSON = json.dumps(
     {
         "title": "Daily Report (mock)",
-        "tldr": [
-            "git_log collector 가 정상 동작했다",
-            "writer 가 LLM 없이도 끝까지 통과한다",
-            "Discord publisher payload 가 생성됐다",
-        ],
+        "tldr": ["오늘 키워드 1줄"],
         "sections": [
             {
-                "heading": "오늘의 작업",
+                "heading": "Spring 트랜잭션 전파",
                 "body_md": (
-                    "## 요약\n"
-                    "오늘은 daily-report MVP 슬라이스를 만들었다. "
-                    "git_log → daily writer → Discord publisher 한 줄 파이프라인.\n\n"
-                    "## 다음 할 일\n"
-                    "- 실제 LLM 호출 검증\n"
-                    "- 다른 collectors 추가 (notion, claude_sessions, web)\n"
+                    "어제 cache 스켈레톤 → 오늘 Spring @Transactional 전파 옵션 분기. "
+                    "REQUIRES_NEW 는 새 세션·새 connection 을 강제하므로 outer commit/rollback 과 분리된다. "
+                    "InnoDB next-key lock 의 영향 범위가 짧아지는 이점이 있다."
                 ),
                 "sources": [],
             }
         ],
-        "estimated_read_minutes": 3,
+        "estimated_read_minutes": 1,
     },
     ensure_ascii=False,
 )
@@ -45,6 +38,7 @@ _MOCK_DEEP_DIVE_JSON = json.dumps(
         "triggered_by": "오늘 작업: Redis 캐시 레이어 리팩토링",
         "concept": "Redis 내부 자료구조 (SDS, ziplist, skiplist)",
         "relates_to_today_work": True,
+        "tier": "primary",
         "perspectives": {
             "backend_jobseeker": (
                 "면접에서 'Redis 가 왜 빠른가' 질문이 나오면 단순히 'in-memory' 라고만 답하는 후보가 많다. "
@@ -87,35 +81,41 @@ _MOCK_WEEKLY_REPORT_JSON = json.dumps(
     {
         "title": "Weekly Report (mock)",
         "tldr": [
-            "이번 주는 daily-report 봇의 v0.1 → v0.3 핵심 파이프라인이 완성됐다",
-            "claude_sessions / web_pages 두 collector 가 새로 추가됐고 모두 단위·e2e 테스트 통과",
-            "다음 주 우선순위: notion + pdf collector + GitHub Actions cron",
+            "이번 주 backend PR 클러스터 2개 — feat:src, fix:src",
+            "JPA dirty checking 과 Spring 트랜잭션 전파 두 개념 covered",
         ],
-        "sections": [
+        "resume_clusters": [
             {
-                "heading": "이번 주 메이저 진척",
-                "body_md": (
-                    "## 1. 4-team 파이프라인 안정화\n"
-                    "schemas.py 의 데이터 계약이 stage 간 어긋남 없이 통과되도록 정착.\n\n"
-                    "## 2. CS 보강 채널 가동\n"
-                    "deep_dive writer 가 오늘 작업과 연관된 CS 토픽을 자동 골라 #cs-foundations 로 별도 발송."
-                ),
-                "sources": [],
+                "cluster_id": "deadbeef",
+                "title": "feat:src",
+                "star_bullet": "S: 캐시 조회 RT 가 평균 120ms / T: 50ms 미만으로 / A: Redis SDS + ziplist 구간 튜닝 / R: P95 35ms",
+                "result_summary": "P95 35ms 달성 — 기존 대비 70% 단축",
+                "interview_questions": [
+                    "Redis hash 의 ziplist → hashtable 임계점은 무엇으로 정해지나?",
+                    "캐시 일관성 모델 중 Write-Through 와 Cache-Aside 의 trade-off?",
+                    "TTL 만료와 active expire / passive expire 의 차이?",
+                ],
             },
             {
-                "heading": "패턴 발견",
-                "body_md": (
-                    "Mock-first 개발 패턴이 잘 맞았다. `--mock-llm` + `--dry-run` 두 플래그로 외부 의존성 0 으로 풀체인 검증."
-                ),
-                "sources": [],
+                "cluster_id": "cafebabe",
+                "title": "fix:src",
+                "star_bullet": "S: 트랜잭션 전파 옵션 오용 / T: REQUIRES_NEW 와 REQUIRED 충돌 해소 / A: 분리된 자원 경계 도입 / R: 데드락 0건",
+                "result_summary": "데드락 발생 0건으로 안정화",
+                "interview_questions": [
+                    "@Transactional 의 propagation 7가지 중 REQUIRES_NEW 가 새 connection 을 요구하는 이유는?",
+                    "InnoDB next-key lock 이 트랜잭션 격리 수준과 어떻게 상호작용하나?",
+                    "롤백 시 영속성 컨텍스트의 dirty checking 은 어떻게 무효화되나?",
+                ],
+            },
+        ],
+        "concept_drills": [
+            {
+                "concept": "Spring 트랜잭션 전파",
+                "interview_prompt": "면접관: REQUIRES_NEW 를 잘못 썼을 때 어떤 장애가 발생할 수 있나요?",
             },
             {
-                "heading": "다음 주 우선순위",
-                "body_md": (
-                    "1. **notion collector** — Notion API 통합\n"
-                    "2. **GitHub Actions cron** — 매일 KST 08:00 자동 트리거"
-                ),
-                "sources": [],
+                "concept": "JPA dirty checking",
+                "interview_prompt": "면접관: dirty checking 비활성화로 성능을 올리고 싶을 때 어떤 옵션이 있나요?",
             },
         ],
         "estimated_read_minutes": 10,
@@ -128,40 +128,40 @@ _MOCK_MONTHLY_REPORT_JSON = json.dumps(
     {
         "title": "Monthly Report (mock) 2026-05",
         "tldr": [
-            "이 달의 한 줄: 'Discord 일/주/월 학습 리포트 봇' 0 → 1 완성",
-            "메이저 토픽: pipeline 설계 / 멱등성 / mock-first 검증 / GitHub Actions cron",
-            "다음 달: 운영 안정화 + 신규 collector 추가",
+            "이 달 backend 메이저 테마 3개 정리",
+            "first_seen=4 / revisit=2 / primary:interest=5:1",
+            "다음 달은 interest 비중을 늘려 80:20 균형 회복",
         ],
         "sections": [
             {
-                "heading": "이 달의 메이저 토픽",
+                "heading": "메이저 테마 (재클러스터링)",
                 "body_md": (
-                    "## 1. 4-team 파이프라인 설계\n"
-                    "collectors → processors → writers → publishers 의 명확한 stage 계약.\n\n"
-                    "## 2. 멱등성 보장\n"
-                    "`PRIMARY KEY (source, id)` + ON CONFLICT UPDATE 로 매 회차 안전 재실행.\n\n"
-                    "## 3. Mock-first 개발 사이클\n"
-                    "`--mock-llm` + `--dry-run` 으로 외부 의존성 0 으로 풀체인 회귀 검증."
+                    "## 1. Spring 트랜잭션 전파 & InnoDB lock\n"
+                    "STAR: @Transactional REQUIRES_NEW 오용 → 자원 경계 분리로 데드락 0건.\n"
+                    "면접 질문: propagation 7가지 / next-key lock / 영속성 컨텍스트 dirty checking 무효화.\n\n"
+                    "## 2. JVM GC & Redis 내부 구조\n"
+                    "STAR: heap dump 분석으로 G1 → ZGC 전환 결정. 캐시 RT P95 35ms.\n"
+                    "면접 질문: ziplist 임계점 / GC pause 비교 / Redis active expire."
                 ),
                 "sources": [],
             },
             {
-                "heading": "이 달에 늘어난 역량",
+                "heading": "진도도 지표",
                 "body_md": (
-                    "- Pydantic v2 의 dump/validate round-trip 활용\n"
-                    "- SQLite 의 ON CONFLICT UPDATE 패턴\n"
-                    "- Discord webhook embed 제약 (10 embeds/메시지, 4096자/desc)\n"
-                    "- 의존성 주입을 통한 네트워크 의존 제거"
+                    "- first_seen_count: 4 (이번 달 처음 등장한 개념)\n"
+                    "- revisit_count   : 2\n"
+                    "- primary:interest = 5:1 — primary 비중 83% (80% 근접)\n\n"
+                    "primary 가 살짝 우세하지만 80:20 범위 내."
                 ),
                 "sources": [],
             },
             {
                 "heading": "다음 달 학습 방향",
                 "body_md": (
-                    "1. Notion API 통합 — 워크스페이스 변경 추적\n"
-                    "2. GitHub Actions cron 운영\n"
-                    "3. PDF 요약 collector\n"
-                    "4. 운영 후 실제 데이터로 deep_dive 프롬프트 튜닝"
+                    "1. Kotlin coroutine structured concurrency (interest 보강)\n"
+                    "2. Spring + Kotlin coroutine 통합 (WebFlux) (interest)\n"
+                    "3. AWS ECS Fargate task definition 깊이 (primary)\n"
+                    "→ interest 비중을 늘려 80:20 균형 회복 권장 (read-only audit; deep_dive 가 enforce)."
                 ),
                 "sources": [],
             },

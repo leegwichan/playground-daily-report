@@ -40,13 +40,18 @@ def report_to_embeds(report: Report, color: int) -> list[dict]:
     """
     embeds: list[dict] = []
 
-    # 1) 메인 embed
+    # 1) 메인 embed — footer 는 report.kind 에 따라 dispatch (AC #19 구조적 보장).
+    # weekly / monthly 는 "직접 골라 이력서에 옮길 후보" 표기를 publisher 가 직접 부착해
+    # LLM 협조 의존을 제거한다.
+    footer_text = f"~{report.estimated_read_minutes}분 읽기"
+    if report.kind in ("weekly", "monthly"):
+        footer_text += " · 직접 골라 이력서에 옮길 후보"
     embeds.append(
         {
             "title": _truncate(report.title, _EMBED_TITLE_LIMIT),
             "description": "\n".join(f"• {b}" for b in report.tldr),
             "color": color,
-            "footer": {"text": f"~{report.estimated_read_minutes}분 읽기"},
+            "footer": {"text": footer_text},
             "timestamp": report.generated_at.isoformat(),
         }
     )

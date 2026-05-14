@@ -6,33 +6,39 @@ profile:
   language: ko
 
   # 직무 레벨 — writers 가 톤·난이도·CS 보강 관점 결정에 사용
-  # 여러 개 동시 지정 가능. writers 는 모든 레벨을 통과시키는 콘텐츠를 생성한다.
-  # 예) [backend_jobseeker, backend_junior] 로 두면
-  #     - 취준생용: 면접·포트폴리오·기본기 관점
-  #     - 주니어용: 실무 생산성·디버깅·기술 깊이 관점
-  #     두 관점 모두 한 리포트에 포함됨 (CSFoundationsBlock.perspectives 참조)
-  #
-  # 사용 가능한 값 (자유 문자열도 허용):
-  #   backend_jobseeker | backend_junior | backend_mid | backend_senior
-  #   frontend_jobseeker | frontend_junior | frontend_mid | frontend_senior
-  #   fullstack_* | data_* | ml_* | devops_* | mobile_*
+  # 백엔드 도메인 집중 모드는 backend_jobseeker + backend_junior 두 페르소나를 동시 서빙한다.
+  # deep_dive 의 perspectives 두 key 와 weekly 의 2섹션 (이력서 / 누적 개념) 으로 분리 노출.
   levels:
     - backend_jobseeker
     - backend_junior
 
-  experience_years: 0          # 경력 (년, 소수 가능)
+  experience_years: 1.5          # 경력 (년, 소수 가능)
 
-  # 현재 주력 기술 — 토픽 클러스터링 가중치에 사용
+  # [DEPRECATED] current_focus 는 stacks 로 대체되었습니다. backward compat 위해 유지.
+  # 새 코드는 stacks.primary / stacks.interest 를 우선 참조합니다.
   current_focus:
-    - python
-    - fastapi
-    - postgresql
+    - java
+    - spring-boot
+    - mysql
+
+  # stacks — 실제 사용 스택. **본인 실 스택으로 반드시 갱신** (예시 그대로 두지 마세요).
+  # primary : 80% 비중. daily/deep_dive 키워드 어휘의 1순위.
+  # interest: 20% 비중. 학습 곁가지, 면접 차별화 포인트.
+  stacks:
+    primary:
+      - java
+      - spring-boot
+      - mysql
+      - aws
+    interest:
+      - kotlin
 
   # 학습 목표 — deep_dive(CS 보강) writer 가 우선 제안할 주제
   learning_goals:
-    - "DB internals (B-tree / LSM tree / MVCC) 깊이 이해"
-    - "분산 시스템 일관성 모델 (CAP, PACELC) 정리"
-    - "HTTP/2, HTTP/3 동작 원리"
+    - "Spring AOP 와 트랜잭션 전파 매커니즘"
+    - "MySQL InnoDB 의 lock 모드와 MVCC"
+    - "AWS ECS Fargate 배포 파이프라인"
+    - "JVM GC 알고리즘 비교 (G1 vs ZGC)"
 
   # 약한 영역 — deep_dive 가 일부러 자주 섞어줌
   weak_areas:
@@ -56,7 +62,7 @@ cs_foundations:
   # 우선 다룰 영역
   prioritize:
     - employment_cs        # 취업용 CS 기본기 (자료구조·알고리즘·OS·DB·네트워크)
-    - dev_tool_internals   # 사용 도구 내부 동작 (Spring/Redis/PostgreSQL/Kafka 등)
+    - dev_tool_internals   # 사용 도구 내부 동작 (Spring/JVM/MySQL/AWS/Kafka 등)
 
   # 가능하면 오늘 작업한 이벤트와 연결된 주제 우선
   # true → 연관 토픽이 있으면 그것부터, 없을 때만 fallback_topics 사용
@@ -66,18 +72,35 @@ cs_foundations:
   min_days_between_repeat: 14
 
   # 오늘 작업과 연관 토픽이 없을 때만 사용하는 폴백 풀
-  # writers 가 weak_areas / learning_goals 와 매칭해 1개 선택
+  # primary:interest 80:20 비율로 구성 (24~26개).
+  # 'B-tree vs Hash Index' 는 의도적으로 제외 — 'B-tree vs LSM tree' 가 면접 깊이에서 우월하므로 후자 유지.
   fallback_topics:
-    - "DB indexing — B-tree vs Hash Index"
+    # primary (Java/Spring/MySQL/AWS) — 20개
     - "Spring AOP 동작 원리 (CGLIB vs JDK Proxy)"
+    - "Spring 트랜잭션 전파 (Propagation 7가지)"
+    - "Spring Security filter chain 내부 구조"
+    - "Spring MVC DispatcherServlet 의 요청 처리 흐름"
+    - "JPA dirty checking 과 영속성 컨텍스트"
+    - "JVM GC 알고리즘 비교 (G1 vs ZGC)"
+    - "JVM 메모리 영역과 클래스 로딩"
+    - "MySQL InnoDB lock 모드 (record/gap/next-key)"
+    - "MySQL InnoDB MVCC 와 undo log"
+    - "B-tree vs LSM tree (DB 인덱스 비교)"
+    - "분산 시스템 일관성 모델 (Linearizability / Sequential / Eventual)"
+    - "분산 트랜잭션 (2PC vs Saga)"
+    - "캐시 일관성 — Cache-Aside / Write-Through / Write-Back"
     - "Redis 내부 자료구조 (SDS, ziplist, skiplist)"
-    - "PostgreSQL MVCC 와 VACUUM"
+    - "AWS ECS Fargate 배포 흐름과 task definition"
+    - "HTTP/2 멀티플렉싱 vs HTTP/3 QUIC"
     - "TCP 3-way handshake & TLS 1.3 handshake"
     - "운영체제 컨텍스트 스위칭 비용"
-    - "JVM GC 알고리즘 비교 (G1 vs ZGC)"
-    - "HTTP/2 멀티플렉싱 vs HTTP/3 QUIC"
-    - "캐시 일관성 — Cache-Aside / Write-Through / Write-Back"
-    - "분산 시스템 일관성 모델 (Linearizability / Sequential / Eventual)"
+    - "Linux file descriptor 와 ulimit"
+    - "Kafka consumer group 과 rebalance"
+    # interest (Kotlin) — 4개
+    - "Kotlin coroutine 의 structured concurrency"
+    - "Kotlin null safety 의 컴파일러 인지"
+    - "JVM 에서 Kotlin reified type parameter"
+    - "Spring + Kotlin coroutine 통합 (WebFlux)"
 
 discord:
   # 환경변수 참조. 실제 webhook URL 은 .env 에 보관.
@@ -104,11 +127,22 @@ schedule:
 llm:
   # Google Gemini 사용 (Anthropic 에서 전환 — 무료 티어 활용)
   # 모델 카탈로그: https://ai.google.dev/gemini-api/docs/models/gemini
-  # writers 와 processors 가 각각 다른 모델 사용 가능
-  # processors 는 클러스터링·요약만 → 가장 가벼운 모델
-  # writers   는 최종 리포트 생성 → 약간 더 좋은 모델
   processor_model: gemini-2.5-flash-lite
-  writer_model:    gemini-2.5-flash
+  writer_model:    gemini-2.5-pro
 
   # prompt caching (Gemini 는 implicit caching 자동 — 별도 설정 불필요)
   prompt_caching: true
+
+# ─────────────────────────────────────────────────────────
+# Event classification — file_category 분류 룰 (백엔드 도메인 집중 모드)
+# git collector 가 변경 파일 경로를 매칭해 backend / agent / mixed / unknown 으로 push.
+# 디폴트 패턴은 모듈 상수에서 *확장* 됨 (사용자 추가는 합집합, 덮어쓰기 X).
+# agent_path_patterns 가 backend 보다 우선순위 — agent 가 먼저 매칭됨.
+# ─────────────────────────────────────────────────────────
+event_classification:
+  # 사용자가 *추가* 하고 싶은 backend 파일 패턴 (fnmatch glob, 소문자 정규화 후 매칭)
+  backend_path_patterns: []
+  # 사용자가 *추가* 하고 싶은 agent (AI Agent 작업) 파일 패턴
+  agent_path_patterns: []
+  # claude_session 이벤트의 file_category 를 같은 시간대 git 으로 양보할 윈도우 (분)
+  overlap_window_minutes: 30

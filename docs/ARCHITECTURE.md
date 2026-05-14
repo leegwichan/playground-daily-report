@@ -8,7 +8,7 @@
 - **Packaging**: `uv` (또는 `pip` + `pyproject.toml`)
 - **Validation**: `pydantic` v2
 - **Storage**: SQLite (단일 파일 `data/state.db`)
-- **LLM**: Google Gemini API (`google-genai` SDK, 무료 티어 활용 — Gemini 2.5 Flash)
+- **LLM**: Google Gemini API (`google-genai` SDK, 무료 티어 활용 — writer: Gemini 2.5 Pro / processor: Flash-Lite)
 - **Scheduler**: GitHub Actions cron (`0 23 * * *` UTC = 08:00 KST 다음날)
 - **Discord**: Webhook (봇 권한 불필요, 추후 슬래시 커맨드 필요해지면 봇 전환)
 

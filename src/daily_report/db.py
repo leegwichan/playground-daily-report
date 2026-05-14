@@ -24,6 +24,15 @@ class Database:
         ddl = _SCHEMA_PATH.read_text(encoding="utf-8")
         with sqlite3.connect(self.db_path) as conn:
             conn.executescript(ddl)
+            # idempotent migration — tier 칼럼은 schema.sql 에 추가되었지만
+            # 기존 sqlite 파일은 ALTER TABLE 로만 받아 가능. 이미 있으면 OperationalError 무시.
+            # (NB2: schema.sql ↔ _init_schema 가 함께 lockstep).
+            try:
+                conn.execute(
+                    "ALTER TABLE cs_concepts_covered ADD COLUMN tier TEXT"
+                )
+            except sqlite3.OperationalError:
+                pass  # duplicate column 또는 이미 추가됨
 
     @contextmanager
     def conn(self) -> Iterator[sqlite3.Connection]:
@@ -114,7 +123,7 @@ class Database:
             return conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0]
 
     # ─────────────────────────────────────────────────────────
-    # CS 개념 추적 (deep_dive 반복 방지)
+    # CS 개념 추적 (deep_dive 반복 방지 + tier 분배 audit)
     # ─────────────────────────────────────────────────────────
     def recently_covered_concepts(self, within_days: int) -> list[str]:
         """min_days_between_repeat 내에 이미 다룬 개념 목록.
@@ -129,18 +138,89 @@ class Database:
             ).fetchall()
             return [r[0] for r in rows]
 
-    def mark_concept_covered(self, concept: str, report_id: Optional[int] = None) -> None:
-        """개념을 다뤘다고 기록. 기존에 있으면 last_covered_at 갱신, times_covered +1."""
+    def recently_covered_concepts_with_meta(
+        self, within_days: int
+    ) -> list[tuple[str, datetime]]:
+        """(concept, last_covered_at) 튜플 리스트. deep_dive 의 (A) 복습 link 후보 검색용."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=within_days)).isoformat()
+        with self.conn() as conn:
+            rows = conn.execute(
+                "SELECT concept, last_covered_at FROM cs_concepts_covered "
+                "WHERE last_covered_at >= ? ORDER BY last_covered_at DESC",
+                (cutoff,),
+            ).fetchall()
+        result: list[tuple[str, datetime]] = []
+        for r in rows:
+            try:
+                ts = datetime.fromisoformat(r[1])
+            except (ValueError, TypeError):
+                continue
+            result.append((r[0], ts))
+        return result
+
+    def tier_distribution(self, within_days: int) -> dict[str, int]:
+        """최근 N일의 tier 카운트. monthly 진도도 지표 + deep_dive 분배 추천에 사용.
+
+        Returns:
+            {'primary': int, 'interest': int, 'unknown': int}
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=within_days)).isoformat()
+        result = {"primary": 0, "interest": 0, "unknown": 0}
+        with self.conn() as conn:
+            rows = conn.execute(
+                "SELECT tier, COUNT(*) FROM cs_concepts_covered "
+                "WHERE last_covered_at >= ? GROUP BY tier",
+                (cutoff,),
+            ).fetchall()
+        for tier, n in rows:
+            if tier in ("primary", "interest"):
+                result[tier] = n
+            else:
+                result["unknown"] += n
+        return result
+
+    def concepts_covered_between(
+        self, start: datetime, end: datetime
+    ) -> list[tuple[str, Optional[str], str]]:
+        """주어진 기간 [start, end) 안에 covered 된 개념 — weekly/monthly 용.
+
+        Returns:
+            (concept, tier, last_covered_at_iso) 튜플 리스트.
+        """
+        with self.conn() as conn:
+            rows = conn.execute(
+                "SELECT concept, tier, last_covered_at FROM cs_concepts_covered "
+                "WHERE last_covered_at >= ? AND last_covered_at < ? "
+                "ORDER BY last_covered_at DESC",
+                (start.isoformat(), end.isoformat()),
+            ).fetchall()
+        return [(r[0], r[1], r[2]) for r in rows]
+
+    def mark_concept_covered(
+        self,
+        concept: str,
+        report_id: Optional[int] = None,
+        tier: Optional[str] = None,
+    ) -> None:
+        """개념을 다뤘다고 기록.
+
+        - 신규 행 : INSERT (tier 도 함께).
+        - 기존 행 : last_covered_at + times_covered+1 갱신.
+                    tier 는 새 값이 있으면 갱신, 없으면 기존 값 유지 (COALESCE).
+        """
+        if tier is not None and tier not in ("primary", "interest"):
+            raise ValueError(f"invalid tier: {tier!r}")
         now = datetime.now(timezone.utc).isoformat()
         with self.conn() as conn:
             conn.execute(
                 """
-                INSERT INTO cs_concepts_covered (concept, last_covered_at, times_covered, last_report_id)
-                VALUES (?, ?, 1, ?)
+                INSERT INTO cs_concepts_covered (concept, last_covered_at, times_covered, last_report_id, tier)
+                VALUES (?, ?, 1, ?, ?)
                 ON CONFLICT(concept) DO UPDATE SET
                   last_covered_at = excluded.last_covered_at,
                   times_covered   = times_covered + 1,
-                  last_report_id  = excluded.last_report_id
+                  last_report_id  = excluded.last_report_id,
+                  tier            = COALESCE(excluded.tier, tier)
                 """,
-                (concept, now, report_id),
+                (concept, now, report_id, tier),
             )

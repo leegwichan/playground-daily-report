@@ -7,7 +7,6 @@ daily / weekly / monthly 모두 이 모듈을 import.
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from ..config import AppConfig
 from ..schemas import Event
@@ -53,16 +52,42 @@ def render_events(events: list[Event]) -> str:
     return "\n\n".join(blocks)
 
 
+def _file_category_prefix(md: dict) -> str:
+    """file_category 한 줄 prefix — backend/agent/mixed 일 때만 출력 (unknown 생략).
+
+    LLM 이 system prompt 의 'agent 이벤트 본문 인용 금지' 룰을 인지하도록 자연어로 노출.
+    """
+    cat = md.get("file_category")
+    if cat not in ("backend", "agent", "mixed"):
+        return ""
+    backend_n = md.get("backend_file_count")
+    agent_n = md.get("agent_file_count")
+    detail = ""
+    if backend_n is not None or agent_n is not None:
+        bits = []
+        if backend_n:
+            bits.append(f"backend×{backend_n}")
+        if agent_n:
+            bits.append(f"agent×{agent_n}")
+        if bits:
+            detail = f" ({', '.join(bits)})"
+    return f"\n  분류: {cat}{detail}"
+
+
 def _source_specific_hint(ev: Event) -> str:
     md = ev.metadata if isinstance(ev.metadata, dict) else {}
     src = ev.source.value
 
+    # file_category prefix 는 source 무관하게 가장 먼저 노출
+    cat_prefix = _file_category_prefix(md)
+
+    body = ""
     if src == "git":
         stat = md.get("files_stat") or ""
         if stat:
             last_line = stat.splitlines()[-1] if stat.splitlines() else ""
             if last_line:
-                return f"\n  파일변경: {last_line}"
+                body = f"\n  파일변경: {last_line}"
     elif src == "claude_session":
         tools = md.get("tool_call_counts") or {}
         if tools:
@@ -72,20 +97,20 @@ def _source_specific_hint(ev: Event) -> str:
             libs = md.get("library_hints") or []
             if libs:
                 extra = f" / 라이브러리: {', '.join(libs[:5])}"
-            return f"\n  도구: {tool_str}{extra}"
+            body = f"\n  도구: {tool_str}{extra}"
     elif src == "web":
         label = md.get("label") or ""
         if label:
-            return f"\n  소스: {label}"
+            body = f"\n  소스: {label}"
     elif src == "notion":
         page = md.get("page_label") or ""
         if page:
-            return f"\n  Notion: {page}"
+            body = f"\n  Notion: {page}"
     elif src == "pdf":
         fname = md.get("file_name") or ""
         if fname:
-            return f"\n  PDF: {fname}"
-    return ""
+            body = f"\n  PDF: {fname}"
+    return cat_prefix + body
 
 
 def format_profile_block(cfg: AppConfig) -> dict:

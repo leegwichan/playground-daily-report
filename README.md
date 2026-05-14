@@ -5,12 +5,22 @@
 
 ## 무엇을 해주나요
 
-- **#daily** — 어제 24h 활동 요약 (매일 KST 08:00)
-- **#weekly** — 지난 7일 회고 + 다음 주 1-2 우선순위 (월요일 KST 08:00)
-- **#monthly** — 지난 30일 회고 + 다음 달 학습 방향 (1일 KST 08:00)
-- **#cs-foundations** — 오늘 작업과 연관된 CS / 도구 내부지식. 사용자 프로필이 `[backend_jobseeker, backend_junior]` 같이 복수면 두 관점 모두 통과시킴
+- **#daily** — 어제 24h **백엔드** 활동 요약 1섹션 (≤500자), 키워드 + 어제 작업 1줄 (매일 KST 08:00). 백엔드 이벤트가 0개면 silently skip
+- **#weekly** — 지난 7일 회고 2섹션: *이력서 재료* (결정론적 PR 클러스터링 + STAR 1줄 + 면접질문 3개) + *개념 누적 지표* (월요일 KST 08:00)
+- **#monthly** — 지난 30일 회고 3섹션: *메이저 테마 재클러스터링* + *진도도 지표* + *다음 달 학습 방향* (1일 KST 08:00)
+- **#cs-foundations** — 오늘 작업과 연관된 CS / 도구 내부지식. 두 페르소나 (`backend_jobseeker`, `backend_junior`) 의 perspectives 두 key 분리 노출. primary:interest 80:20 분배.
 
 수집 소스: **git** / **Notion** / **Claude Code 세션** / **임의 웹 URL** / **PDF**
+
+## 백엔드 도메인 집중 모드
+
+이 봇은 **백엔드 도메인 기반 지식 깊이 탐구**를 단일 줄기로 한다. 두 페르소나 (취준생 + 현업 주니어) 가 한 리포트 안에서 각자 가치를 가져가도록 섹션을 분리한다.
+
+- **stacks 설정**: `config/profile.yaml` 의 `profile.stacks.primary` / `profile.stacks.interest` 를 본인 실 스택으로 **반드시 갱신**해야 한다. 예시값 (Java/Spring Boot/MySQL/AWS + Kotlin) 을 그대로 두면 의도와 어긋난 키워드가 나온다.
+- **file_category 동작**: git collector 가 커밋의 변경 파일 경로를 `backend` / `agent` / `mixed` / `unknown` 으로 분류해 `Event.metadata` 에 push. `agent` 분류 이벤트 (`skills/**/*.md`, `.claude/**`, `.github/workflows/*.yml` 등) 는 본문에서 제외되고 "오늘 도구 사용량" 보조 신호로만 남는다.
+- **daily skip 룰**: 그날 backend 분류 이벤트가 0개면 daily Discord webhook 호출이 발생하지 않는다 (로그: `[daily] skipped — no backend events`).
+- **weekly 2-section 구조**: ① 이력서 재료 — 결정론적 `processors/git_pr_clusterer.py` 가 1차 클러스터링 (subject prefix + top-level dir) 한 뒤 LLM 이 클러스터당 STAR 1줄 + 면접 예상 질문 3개. ② 개념 누적 지표 — 이번 주 deep_dive 개념 + 면접 답변 연습 prompt.
+- **Discord footer**: weekly/monthly embed footer 에 `직접 골라 이력서에 옮길 후보` 표기가 자동 부착된다 (publisher 가 `report.kind` 로 dispatch — LLM 협조 의존 제거).
 
 ## 5분 안에 띄우기 (로컬 dry-run)
 
@@ -51,7 +61,7 @@ NOTION_API_TOKEN=secret_...   # Notion 안 쓰면 비워둬도 OK
 GIT_AUTHOR_EMAIL=you@example.com
 ```
 
-> 💡 **무료로 운영 가능**. Gemini 2.5 Flash 무료 티어 = 15 RPM / 1500 RPD. 우리는 하루 2-3회만 호출하므로 부담 없이 무료. Discord webhook 도 무제한 무료. 즉 0원으로 운영.
+> 💡 **무료로 운영 가능**. writer 는 Gemini 2.5 Pro, processor 는 Flash-Lite 사용 — 둘 다 무료 티어 존재. 하루 cron 1회당 LLM 콜 5개 안팎이라 Pro 의 빡빡한 RPD 한도도 안전. Discord webhook 도 무제한 무료. 즉 0원으로 운영.
 
 > ⚠️ **`.env` 는 gitignore 됨.** 절대 commit 하지 말 것. 채팅·공개 메시지에도 절대 붙여넣지 말 것.
 

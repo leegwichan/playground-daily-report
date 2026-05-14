@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from ..schemas import Event, SourceType
+from ..schemas import Event, METADATA_KEY_FILE_CATEGORY, SourceType
 
 # slash 커맨드/시스템 메시지 등 자연어가 아닌 user 메시지는 first_prompt 후보에서 제외
 _NON_NATURAL_PREFIXES = (
@@ -349,6 +349,8 @@ def _build_event_for_session(
     day_key = last_ts.date().isoformat()
     event_id = f"claude_session:{session_id}:{day_key}"
 
+    # file_category: 잠정값 'unknown'. main._resolve_collector_overlap() 가
+    # 같은 시간대 git 이벤트가 있으면 그 분류로 덮어쓴다.
     return Event(
         id=event_id,
         source=SourceType.CLAUDE_SESSION,
@@ -375,5 +377,6 @@ def _build_event_for_session(
             "first_user_prompt": stats["first_user_prompt"] or "",
             "user_msg_count": stats["user_msg_count"],
             "assistant_msg_count": stats["assistant_msg_count"],
+            METADATA_KEY_FILE_CATEGORY: "unknown",
         },
     )

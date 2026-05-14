@@ -55,7 +55,11 @@ def empty_git_repo(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def two_commit_repo(empty_git_repo: Path) -> Path:
-    """한글 커밋 메시지 2개를 가진 repo."""
+    """한글 커밋 메시지 2개를 가진 repo.
+
+    백엔드 도메인 집중 모드 호환: 두 번째 커밋은 src/Cache.java + tests/CacheTest.java 로
+    backend 분류 (file_category=='backend') 가 확실히 잡힌다.
+    """
     repo = empty_git_repo
     (repo / "README.md").write_text("# learning notes", encoding="utf-8")
     _run_git(["add", "."], cwd=repo)
@@ -63,7 +67,16 @@ def two_commit_repo(empty_git_repo: Path) -> Path:
         ["commit", "-m", "docs: 학습 노트 시작", "-m", "Redis 내부 자료구조 SDS 정리."],
         cwd=repo,
     )
-    (repo / "cache.py").write_text("class Cache:\n    pass\n", encoding="utf-8")
+    src_dir = repo / "src"
+    src_dir.mkdir(exist_ok=True)
+    (src_dir / "Cache.java").write_text(
+        "public class Cache {}\n", encoding="utf-8"
+    )
+    tests_dir = repo / "tests"
+    tests_dir.mkdir(exist_ok=True)
+    (tests_dir / "CacheTest.java").write_text(
+        "public class CacheTest {}\n", encoding="utf-8"
+    )
     _run_git(["add", "."], cwd=repo)
     _run_git(["commit", "-m", "feat: cache 스켈레톤"], cwd=repo)
     return repo

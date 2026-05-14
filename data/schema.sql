@@ -45,12 +45,14 @@ CREATE INDEX IF NOT EXISTS idx_reports_period ON reports(kind, period_start);
 -- ─────────────────────────────────────────────────────────
 -- cs_concepts_covered: CS 보강에서 다룬 개념 추적
 -- 같은 개념을 너무 자주 반복하지 않기 위함
+-- tier 칼럼: 'primary' (사용자 실 스택) / 'interest' (학습 곁가지) — monthly 진도도 audit 의 source-of-truth
 -- ─────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS cs_concepts_covered (
     concept           TEXT PRIMARY KEY,
     last_covered_at   TEXT NOT NULL,
     times_covered     INTEGER NOT NULL DEFAULT 1,
     last_report_id    INTEGER,
+    tier              TEXT CHECK(tier IN ('primary','interest')) DEFAULT NULL,
     FOREIGN KEY (last_report_id) REFERENCES reports(id)
 );
 

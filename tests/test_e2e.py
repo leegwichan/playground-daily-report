@@ -105,7 +105,7 @@ def test_empty_repo_still_succeeds(
     project_root: Path,
     git_only_sources_yaml: Path,
 ) -> None:
-    """커밋이 없어도 '조용한 하루' 리포트로 통과해야 함."""
+    """커밋이 없으면 daily 가 skip (backend events 0) — AC #2."""
     db = tmp_path / "state.db"
     rc = _run_cli_daily_only(empty_git_repo, db, project_root, git_only_sources_yaml)
     assert rc == 0
@@ -115,7 +115,8 @@ def test_empty_repo_still_succeeds(
         events_count = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
         reports_count = conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0]
         assert events_count == 0
-        assert reports_count == 1  # 조용한 하루도 리포트는 발행
+        # 새 동작: backend events 0이면 daily Discord 호출 자체 skip → 리포트도 저장 안 됨
+        assert reports_count == 0
     finally:
         conn.close()
 

@@ -14,6 +14,17 @@ from pydantic import BaseModel, Field, HttpUrl
 
 
 # ─────────────────────────────────────────────────────────
+# File category (Event.metadata convention)
+#
+# git collector 가 변경 파일 분류 후 dominant category 를 Event.metadata 에 push.
+# claude_session collector 는 잠정값을 두고, main._resolve_collector_overlap()
+# 이 같은 시간대 git 이벤트가 있으면 git 값으로 덮어쓴다.
+# ─────────────────────────────────────────────────────────
+FileCategory = Literal["backend", "agent", "mixed", "unknown"]
+METADATA_KEY_FILE_CATEGORY = "file_category"
+
+
+# ─────────────────────────────────────────────────────────
 # Source taxonomy
 # ─────────────────────────────────────────────────────────
 class SourceType(str, Enum):
@@ -85,6 +96,48 @@ class ProcessedBatch(BaseModel):
 
 
 # ─────────────────────────────────────────────────────────
+# Weekly 이력서 재료 — processors/git_pr_clusterer.py 가 만들고 LLM 이 채움
+# ─────────────────────────────────────────────────────────
+class PrCluster(BaseModel):
+    """처리적 PR 클러스터 — git_pr_clusterer 가 결정론적으로 생성.
+
+    LLM 은 이 cluster_id 별 STAR bullet + 면접 질문 3개를 채운다.
+    """
+
+    cluster_id: str = Field(..., description="sha256(prefix + top_dir)[:8] — stable across runs")
+    title: str = Field(..., description="prefix + top_level_dir (e.g., 'feat:src')")
+    event_shas: list[str] = Field(default_factory=list, description="이 cluster 에 속한 git commit sha")
+
+
+class ResumeCluster(BaseModel):
+    """이력서 후보 한 줄 — weekly 의 1섹션 단위.
+
+    result_summary 가 빈 문자열 또는 min_length 미달이면 weekly writer 코드가 자체 drop (AC #18).
+    """
+
+    cluster_id: str
+    title: str
+    star_bullet: str = Field(min_length=10, description="STAR (Situation/Task/Action/Result) 1줄")
+    result_summary: str = Field(min_length=10, description="R(결과/임팩트) — 추정 불가 시 빈 문자열 → drop")
+    interview_questions: list[str] = Field(min_length=3, max_length=3, description="이 cluster 에 대한 면접 예상 질문 3개")
+
+
+class WeeklyResumeBundle(BaseModel):
+    clusters: list[ResumeCluster] = Field(default_factory=list)
+
+
+class ConceptDrill(BaseModel):
+    """이번 주 covered 개념에 대한 면접 답변 연습 prompt."""
+
+    concept: str
+    interview_prompt: str = Field(min_length=10)
+
+
+class WeeklyConceptDrillBundle(BaseModel):
+    drills: list[ConceptDrill] = Field(default_factory=list)
+
+
+# ─────────────────────────────────────────────────────────
 # Stage 3 output: writers → publishers
 # ─────────────────────────────────────────────────────────
 ReportKind = Literal["daily", "weekly", "monthly", "deep_dive"]
@@ -127,6 +180,13 @@ class CSFoundationsBlock(BaseModel):
         description="5-10 분 분량 markdown 본문 설명 (레벨 무관, 공통)",
     )
     further_reading: list[HttpUrl] = Field(default_factory=list)
+
+    # tier: deep_dive 가 stacks.primary 어휘로 골랐는지 stacks.interest 어휘로 골랐는지.
+    # monthly 진도도 audit + cs_concepts_covered.tier 칼럼의 source.
+    tier: Optional[Literal["primary", "interest"]] = Field(
+        None,
+        description="primary (사용자 실 스택) 또는 interest (학습 곁가지). 추정 불가 시 None.",
+    )
 
 
 class Report(BaseModel):

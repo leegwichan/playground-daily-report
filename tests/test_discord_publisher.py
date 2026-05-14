@@ -78,3 +78,49 @@ def test_publish_without_webhook_fails_when_not_dry_run() -> None:
     )
     assert result.success is False
     assert "missing webhook_url" in (result.error or "")
+
+
+def _weekly_report() -> Report:
+    now = datetime.now(timezone.utc)
+    return Report(
+        kind="weekly",
+        period_start=now,
+        period_end=now,
+        title="Weekly Report",
+        tldr=["x"],
+        sections=[ReportSection(heading="섹션", body_md="본문")],
+        estimated_read_minutes=10,
+        generated_at=now,
+    )
+
+
+def _monthly_report() -> Report:
+    now = datetime.now(timezone.utc)
+    return Report(
+        kind="monthly",
+        period_start=now,
+        period_end=now,
+        title="Monthly Report",
+        tldr=["x"],
+        sections=[ReportSection(heading="섹션", body_md="본문")],
+        estimated_read_minutes=15,
+        generated_at=now,
+    )
+
+
+def test_footer_dispatch_weekly_includes_resume_phrase() -> None:
+    """AC #19 / E2: weekly 의 footer 에 '직접 골라 이력서에 옮길 후보' 부착."""
+    embeds = report_to_embeds(_weekly_report(), color=0)
+    assert "직접 골라 이력서에 옮길 후보" in embeds[0]["footer"]["text"]
+
+
+def test_footer_dispatch_monthly_includes_resume_phrase() -> None:
+    """AC #19: monthly 도 동일 표기."""
+    embeds = report_to_embeds(_monthly_report(), color=0)
+    assert "직접 골라 이력서에 옮길 후보" in embeds[0]["footer"]["text"]
+
+
+def test_footer_dispatch_daily_does_not_include_resume_phrase() -> None:
+    """daily 의 footer 는 이력서 표기 없음 (kind dispatch 정확성)."""
+    embeds = report_to_embeds(_sample_report(), color=0)
+    assert "직접 골라 이력서에 옮길 후보" not in embeds[0]["footer"]["text"]
