@@ -1,14 +1,14 @@
 name: Daily / Weekly / Monthly Report
 
 on:
-  schedule:
+#  schedule:
     # 매일 KST 08:00 (= UTC 23:00)
-    - cron: '0 23 * * *'
+#    - cron: '0 23 * * *'
     # 매주 월요일 KST 08:00 (= UTC 일요일 23:00)
-    - cron: '0 23 * * 0'
+#    - cron: '0 23 * * 0'
     # 매월 1일 KST 08:00 (= UTC 마지막날 23:00). 28-31 모두 트리거하되
     # "내일이 1일" 인 경우에만 실행 (실제 월말만 통과시키는 가드).
-    - cron: '0 23 28-31 * *'
+#    - cron: '0 23 28-31 * *'
 
   workflow_dispatch:
     inputs:
